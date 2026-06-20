@@ -3,11 +3,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from src.routes.products import router as products_router
+from src.routes.skus import router as skus_router
 from src.services.errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
 
 app = FastAPI(title="NeoMarket B2B Service", version="1.0.0")
 
 app.include_router(products_router)
+app.include_router(skus_router)
 
 
 @app.get("/healthz", tags=["Health"])
