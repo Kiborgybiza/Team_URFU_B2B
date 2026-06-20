@@ -4,7 +4,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, selectinload
 
 from src.models import Category, Product, ProductCharacteristic, ProductImage, ProductStatus, SKU
-from src.services.errors import NotFoundError
+from src.services.errors import ForbiddenError, NotFoundError
 
 
 class ProductCreateValidationError(Exception):
@@ -48,6 +48,32 @@ def get_catalog_products(db: Session, ids_str: str | None = None) -> list[Produc
 
     products = db.scalars(query).all()
     return [p for p in products if any(s.active_quantity > 0 for s in p.skus if not s.deleted)]
+
+
+def update_product(db: Session, product_id: uuid.UUID, payload: dict, seller_id: uuid.UUID) -> Product:
+    product = get_product_by_id(db, product_id, seller_id=seller_id)
+    if product.status == ProductStatus.HARD_BLOCKED:
+        raise ForbiddenError("Cannot edit a hard-blocked product")
+
+    for field in ("title", "description"):
+        if field in payload and payload[field] is not None:
+            setattr(product, field, payload[field])
+    if "category_id" in payload and payload["category_id"] is not None:
+        if db.get(Category, payload["category_id"]) is None:
+            raise ProductCreateValidationError("category_id", "Category not found")
+        product.category_id = payload["category_id"]
+
+    db.commit()
+    return get_product_by_id(db, product_id, seller_id=seller_id)
+
+
+def delete_product(db: Session, product_id: uuid.UUID, seller_id: uuid.UUID) -> None:
+    product = get_product_by_id(db, product_id, seller_id=seller_id)
+    if product.status == ProductStatus.HARD_BLOCKED:
+        raise ForbiddenError("Cannot delete a hard-blocked product")
+
+    product.deleted = True
+    db.commit()
 
 
 def create_product(db: Session, payload: dict, seller_id: uuid.UUID) -> Product:

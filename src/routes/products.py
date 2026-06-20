@@ -7,12 +7,14 @@ from sqlalchemy.orm import Session
 
 from src.database import get_db
 from src.deps import CatalogAccess, CurrentSeller, get_catalog_access, get_current_seller
-from src.services.errors import NotFoundError
+from src.services.errors import ForbiddenError, NotFoundError
 from src.services.product_service import (
     ProductCreateValidationError,
     create_product,
+    delete_product,
     get_catalog_products,
     get_product_by_id,
+    update_product,
 )
 
 router = APIRouter(prefix="/api/v1/products", tags=["Products"])
@@ -168,3 +170,50 @@ def create_product_endpoint(
         return _error(400, "INVALID_REQUEST", f"{exc.field}: {exc.message}")
 
     return JSONResponse(status_code=201, content=_product_out(product))
+
+
+class ProductUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, max_length=5000)
+    category_id: uuid.UUID | None = None
+
+
+@router.put("/{product_id}", status_code=status.HTTP_200_OK)
+def update_product_endpoint(
+    product_id: uuid.UUID,
+    payload: ProductUpdateRequest,
+    current_seller: CurrentSeller | JSONResponse = Depends(get_current_seller),
+    db: Session = Depends(get_db),
+):
+    if isinstance(current_seller, JSONResponse):
+        return current_seller
+
+    try:
+        product = update_product(db, product_id, payload.model_dump(exclude_none=True), current_seller.seller_id)
+    except ForbiddenError as exc:
+        return _error(403, "FORBIDDEN", str(exc))
+    except NotFoundError as exc:
+        return _error(404, "NOT_FOUND", str(exc))
+    except ProductCreateValidationError as exc:
+        return _error(400, "INVALID_REQUEST", f"{exc.field}: {exc.message}")
+
+    return _product_out(product)
+
+
+@router.delete("/{product_id}", status_code=status.HTTP_200_OK)
+def delete_product_endpoint(
+    product_id: uuid.UUID,
+    current_seller: CurrentSeller | JSONResponse = Depends(get_current_seller),
+    db: Session = Depends(get_db),
+):
+    if isinstance(current_seller, JSONResponse):
+        return current_seller
+
+    try:
+        delete_product(db, product_id, current_seller.seller_id)
+    except ForbiddenError as exc:
+        return _error(403, "FORBIDDEN", str(exc))
+    except NotFoundError as exc:
+        return _error(404, "NOT_FOUND", str(exc))
+
+    return {"ok": True}
