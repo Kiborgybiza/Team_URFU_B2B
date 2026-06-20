@@ -26,9 +26,9 @@ def _product_query():
     )
 
 
-def get_product_by_id(db: Session, product_id: uuid.UUID) -> Product:
+def get_product_by_id(db: Session, product_id: uuid.UUID, seller_id: uuid.UUID | None = None) -> Product:
     product = db.scalars(_product_query().where(Product.id == product_id)).first()
-    if product is None:
+    if product is None or (seller_id is not None and product.seller_id != seller_id):
         raise NotFoundError(f"Product {product_id} not found")
     return product
 

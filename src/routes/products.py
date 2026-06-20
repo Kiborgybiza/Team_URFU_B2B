@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from src.database import get_db
 from src.deps import CurrentSeller, get_current_seller
-from src.services.product_service import ProductCreateValidationError, create_product
+from src.services.errors import NotFoundError
+from src.services.product_service import ProductCreateValidationError, create_product, get_product_by_id
 
 router = APIRouter(prefix="/api/v1/products", tags=["Products"])
 
@@ -80,6 +81,23 @@ def _product_out(product) -> dict:
         "created_at": product.created_at.isoformat(),
         "updated_at": product.updated_at.isoformat(),
     }
+
+
+@router.get("/{product_id}", status_code=status.HTTP_200_OK)
+def get_product_endpoint(
+    product_id: uuid.UUID,
+    current_seller: CurrentSeller | JSONResponse = Depends(get_current_seller),
+    db: Session = Depends(get_db),
+):
+    if isinstance(current_seller, JSONResponse):
+        return current_seller
+
+    try:
+        product = get_product_by_id(db, product_id, seller_id=current_seller.seller_id)
+    except NotFoundError as exc:
+        return _error(404, "NOT_FOUND", str(exc))
+
+    return _product_out(product)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
