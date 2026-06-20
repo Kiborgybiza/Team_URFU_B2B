@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, selectinload
 
 from src.models import Category, Product, ProductCharacteristic, ProductImage, ProductStatus, SKU
@@ -31,6 +31,23 @@ def get_product_by_id(db: Session, product_id: uuid.UUID, seller_id: uuid.UUID |
     if product is None or (seller_id is not None and product.seller_id != seller_id):
         raise NotFoundError(f"Product {product_id} not found")
     return product
+
+
+def get_catalog_products(db: Session, ids_str: str | None = None) -> list[Product]:
+    query = _product_query().where(
+        and_(Product.status == ProductStatus.MODERATED, Product.deleted == False)  # noqa: E712
+    )
+
+    if ids_str:
+        try:
+            ids = [uuid.UUID(id_s.strip()) for id_s in ids_str.split(",") if id_s.strip()]
+        except ValueError:
+            ids = []
+        if ids:
+            query = query.where(Product.id.in_(ids))
+
+    products = db.scalars(query).all()
+    return [p for p in products if any(s.active_quantity > 0 for s in p.skus if not s.deleted)]
 
 
 def create_product(db: Session, payload: dict, seller_id: uuid.UUID) -> Product:
