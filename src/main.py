@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from src.routes.moderation_events import router as moderation_events_router
 from src.routes.products import router as products_router
 from src.routes.reservations import router as reservations_router
 from src.routes.skus import router as skus_router
@@ -9,6 +10,7 @@ from src.services.errors import ConflictError, ForbiddenError, NotFoundError, Va
 
 app = FastAPI(title="NeoMarket B2B Service", version="1.0.0")
 
+app.include_router(moderation_events_router)
 app.include_router(products_router)
 app.include_router(reservations_router)
 app.include_router(skus_router)
