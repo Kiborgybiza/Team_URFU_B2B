@@ -1,13 +1,21 @@
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from src.database import get_db
-from src.deps import CurrentSeller, get_current_seller
-from src.services.product_service import ProductCreateValidationError, create_product
+from src.deps import CatalogAccess, CurrentSeller, get_catalog_access, get_current_seller
+from src.services.errors import ForbiddenError, NotFoundError
+from src.services.product_service import (
+    ProductCreateValidationError,
+    create_product,
+    delete_product,
+    get_catalog_products,
+    get_product_by_id,
+    update_product,
+)
 
 router = APIRouter(prefix="/api/v1/products", tags=["Products"])
 
@@ -30,7 +38,7 @@ class ProductCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str = Field(min_length=1, max_length=5000)
     category_id: uuid.UUID
-    images: list[ImageIn] = Field(default_factory=list)
+    images: list[ImageIn] = Field(default_factory=list, min_length=1)
     characteristics: list[CharacteristicIn] = Field(default_factory=list)
 
 
@@ -61,6 +69,39 @@ def _sku_seller_out(sku) -> dict:
     }
 
 
+def _sku_catalog_out(sku) -> dict:
+    return {
+        "id": str(sku.id),
+        "product_id": str(sku.product_id),
+        "name": sku.name,
+        "price": sku.price,
+        "discount": sku.discount,
+        "article": sku.article,
+        "image": sku.image,
+        "active_quantity": sku.active_quantity,
+        "characteristics": [_char_out(c) for c in sku.characteristics],
+        "created_at": sku.created_at.isoformat(),
+        "updated_at": sku.updated_at.isoformat(),
+    }
+
+
+def _product_catalog_out(product) -> dict:
+    return {
+        "id": str(product.id),
+        "seller_id": str(product.seller_id),
+        "category_id": str(product.category_id),
+        "title": product.title,
+        "description": product.description,
+        "status": product.status.value,
+        "category": {"id": str(product.category.id), "name": product.category.name},
+        "images": [_image_out(i) for i in product.images],
+        "characteristics": [_char_out(c) for c in product.characteristics],
+        "skus": [_sku_catalog_out(s) for s in product.skus if not s.deleted and s.active_quantity > 0],
+        "created_at": product.created_at.isoformat(),
+        "updated_at": product.updated_at.isoformat(),
+    }
+
+
 def _product_out(product) -> dict:
     return {
         "id": str(product.id),
@@ -68,6 +109,7 @@ def _product_out(product) -> dict:
         "category_id": str(product.category_id),
         "title": product.title,
         "description": product.description,
+        "slug": product.slug,
         "status": product.status.value,
         "deleted": product.deleted,
         "blocked": product.blocked,
@@ -76,10 +118,44 @@ def _product_out(product) -> dict:
         "characteristics": [_char_out(c) for c in product.characteristics],
         "skus": [_sku_seller_out(s) for s in product.skus if not s.deleted],
         "blocking_reason": product.blocking_reason,
+        "blocking_reason_id": product.blocking_reason_id,
+        "moderator_comment": product.moderator_comment,
         "field_reports": product.field_reports or [],
         "created_at": product.created_at.isoformat(),
         "updated_at": product.updated_at.isoformat(),
     }
+
+
+@router.get("", status_code=status.HTTP_200_OK)
+def get_catalog_endpoint(
+    ids: str | None = Query(default=None),
+    access: CatalogAccess | JSONResponse = Depends(get_catalog_access),
+    db: Session = Depends(get_db),
+):
+    if isinstance(access, JSONResponse):
+        return access
+    if access.mode != "catalog":
+        return _error(401, "UNAUTHORIZED", "Service key required")
+
+    products = get_catalog_products(db, ids)
+    return {"items": [_product_catalog_out(p) for p in products]}
+
+
+@router.get("/{product_id}", status_code=status.HTTP_200_OK)
+def get_product_endpoint(
+    product_id: uuid.UUID,
+    current_seller: CurrentSeller | JSONResponse = Depends(get_current_seller),
+    db: Session = Depends(get_db),
+):
+    if isinstance(current_seller, JSONResponse):
+        return current_seller
+
+    try:
+        product = get_product_by_id(db, product_id, seller_id=current_seller.seller_id)
+    except NotFoundError as exc:
+        return _error(404, "NOT_FOUND", str(exc))
+
+    return _product_out(product)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -97,3 +173,50 @@ def create_product_endpoint(
         return _error(400, "INVALID_REQUEST", f"{exc.field}: {exc.message}")
 
     return JSONResponse(status_code=201, content=_product_out(product))
+
+
+class ProductUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, max_length=5000)
+    category_id: uuid.UUID | None = None
+
+
+@router.put("/{product_id}", status_code=status.HTTP_200_OK)
+def update_product_endpoint(
+    product_id: uuid.UUID,
+    payload: ProductUpdateRequest,
+    current_seller: CurrentSeller | JSONResponse = Depends(get_current_seller),
+    db: Session = Depends(get_db),
+):
+    if isinstance(current_seller, JSONResponse):
+        return current_seller
+
+    try:
+        product = update_product(db, product_id, payload.model_dump(exclude_none=True), current_seller.seller_id)
+    except ForbiddenError as exc:
+        return _error(403, "FORBIDDEN", str(exc))
+    except NotFoundError as exc:
+        return _error(404, "NOT_FOUND", str(exc))
+    except ProductCreateValidationError as exc:
+        return _error(400, "INVALID_REQUEST", f"{exc.field}: {exc.message}")
+
+    return _product_out(product)
+
+
+@router.delete("/{product_id}", status_code=status.HTTP_200_OK)
+def delete_product_endpoint(
+    product_id: uuid.UUID,
+    current_seller: CurrentSeller | JSONResponse = Depends(get_current_seller),
+    db: Session = Depends(get_db),
+):
+    if isinstance(current_seller, JSONResponse):
+        return current_seller
+
+    try:
+        delete_product(db, product_id, current_seller.seller_id)
+    except ForbiddenError as exc:
+        return _error(403, "FORBIDDEN", str(exc))
+    except NotFoundError as exc:
+        return _error(404, "NOT_FOUND", str(exc))
+
+    return {"ok": True}

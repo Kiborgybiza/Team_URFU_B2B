@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Header, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -32,13 +32,6 @@ class FieldReport(BaseModel):
     comment: str | None = None
 
 
-class BlockingReason(BaseModel):
-    id: str | None = None
-    title: str | None = None
-    code: str | None = None
-    comment: str | None = None
-
-
 class ModerationEventRequest(BaseModel):
     idempotency_key: str
     product_id: uuid.UUID
@@ -47,11 +40,11 @@ class ModerationEventRequest(BaseModel):
     moderator_id: str | None = None
     moderator_comment: str | None = None
     hard_block: bool = False
-    blocking_reason: BlockingReason | None = None
+    blocking_reason_id: str | None = None
     field_reports: list[FieldReport] = Field(default_factory=list)
 
 
-@router.post("/api/v1/events/moderation", status_code=status.HTTP_200_OK)
+@router.post("/api/v1/moderation/events", status_code=status.HTTP_204_NO_CONTENT)
 def moderation_event_endpoint(
     payload: ModerationEventRequest,
     x_service_key: str | None = Header(default=None, alias="X-Service-Key"),
@@ -66,16 +59,16 @@ def moderation_event_endpoint(
         "product_id": payload.product_id,
         "event_type": payload.event_type,
         "hard_block": payload.hard_block,
-        "blocking_reason": payload.blocking_reason.model_dump() if payload.blocking_reason else None,
+        "blocking_reason_id": payload.blocking_reason_id,
         "field_reports": [fr.model_dump() for fr in payload.field_reports],
         "moderator_comment": payload.moderator_comment,
     }
 
     try:
-        result = apply_moderation_event(db, event_payload)
+        apply_moderation_event(db, event_payload)
     except NotFoundError as exc:
         return _error(404, "NOT_FOUND", str(exc))
     except ModerationEventIdempotencyConflictError as exc:
         return _error(409, "IDEMPOTENCY_CONFLICT", str(exc))
 
-    return result
+    return Response(status_code=204)

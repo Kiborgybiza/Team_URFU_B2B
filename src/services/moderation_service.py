@@ -17,8 +17,8 @@ def build_product_created_event(product_id: JsonId, seller_id: str) -> dict:
         "idempotency_key": str(uuid5(NAMESPACE_URL, f"product-created:{product_id}")),
         "product_id": str(product_id),
         "seller_id": seller_id,
-        "event": "CREATED",
-        "date": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "event_type": "CREATED",
+        "occurred_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
 
 
@@ -27,8 +27,8 @@ def build_product_edited_event(product_id: JsonId, seller_id: str) -> dict:
         "idempotency_key": str(uuid4()),
         "product_id": str(product_id),
         "seller_id": seller_id,
-        "event": "EDITED",
-        "date": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "event_type": "EDITED",
+        "occurred_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
 
 
@@ -37,13 +37,13 @@ def build_product_deleted_event(product_id: JsonId, seller_id: str) -> dict:
         "idempotency_key": str(uuid4()),
         "product_id": str(product_id),
         "seller_id": seller_id,
-        "event": "DELETED",
-        "date": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "event_type": "DELETED",
+        "occurred_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
 
 
 def _send(payload: dict) -> None:
-    url = f"{settings.moderation_url.rstrip('/')}/api/v1/events/product"
+    url = f"{settings.moderation_url.rstrip('/')}/api/v1/b2b/events"
     try:
         response = httpx.post(
             url,

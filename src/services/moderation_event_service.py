@@ -39,15 +39,20 @@ def _apply_decision(product: Product, payload: dict) -> ProductStatus:
     if event_type == "MODERATED":
         product.status = ProductStatus.MODERATED
         product.blocking_reason = None
+        product.blocking_reason_id = None
+        product.moderator_comment = payload.get("moderator_comment")
         product.field_reports = []
         return ProductStatus.MODERATED
 
     if payload.get("hard_block"):
         product.status = ProductStatus.HARD_BLOCKED
+        product.deleted = True
     else:
         product.status = ProductStatus.BLOCKED
 
     product.blocking_reason = payload.get("blocking_reason")
+    product.blocking_reason_id = payload.get("blocking_reason_id")
+    product.moderator_comment = payload.get("moderator_comment")
     product.field_reports = payload.get("field_reports", [])
     return product.status
 
