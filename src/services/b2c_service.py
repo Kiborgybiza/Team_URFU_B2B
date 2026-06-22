@@ -15,12 +15,12 @@ class B2CSenderError(Exception):
 def send_sku_out_of_stock_event(*, idempotency_key: str, product_id: JsonId, sku_id: JsonId) -> None:
     payload = {
         "idempotency_key": idempotency_key,
-        "event": "SKU_OUT_OF_STOCK",
+        "event_type": "SKU_OUT_OF_STOCK",
         "product_id": str(product_id),
         "sku_id": str(sku_id),
-        "date": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "occurred_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
-    url = f"{settings.b2c_url.rstrip('/')}/api/v1/events/product"
+    url = f"{settings.b2c_url.rstrip('/')}/api/v1/b2b/events"
     try:
         response = httpx.post(
             url,
@@ -36,11 +36,11 @@ def send_sku_out_of_stock_event(*, idempotency_key: str, product_id: JsonId, sku
 def send_product_blocked_event(*, idempotency_key: str, product_id: JsonId) -> None:
     payload = {
         "idempotency_key": idempotency_key,
-        "event": "PRODUCT_BLOCKED",
+        "event_type": "PRODUCT_BLOCKED",
         "product_id": str(product_id),
-        "date": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "occurred_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
-    url = f"{settings.b2c_url.rstrip('/')}/api/v1/events/product"
+    url = f"{settings.b2c_url.rstrip('/')}/api/v1/b2b/events"
     try:
         response = httpx.post(
             url,

@@ -38,7 +38,7 @@ class ProductCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str = Field(min_length=1, max_length=5000)
     category_id: uuid.UUID
-    images: list[ImageIn] = Field(default_factory=list)
+    images: list[ImageIn] = Field(default_factory=list, min_length=1)
     characteristics: list[CharacteristicIn] = Field(default_factory=list)
 
 
@@ -109,6 +109,7 @@ def _product_out(product) -> dict:
         "category_id": str(product.category_id),
         "title": product.title,
         "description": product.description,
+        "slug": product.slug,
         "status": product.status.value,
         "deleted": product.deleted,
         "blocked": product.blocked,
@@ -117,6 +118,8 @@ def _product_out(product) -> dict:
         "characteristics": [_char_out(c) for c in product.characteristics],
         "skus": [_sku_seller_out(s) for s in product.skus if not s.deleted],
         "blocking_reason": product.blocking_reason,
+        "blocking_reason_id": product.blocking_reason_id,
+        "moderator_comment": product.moderator_comment,
         "field_reports": product.field_reports or [],
         "created_at": product.created_at.isoformat(),
         "updated_at": product.updated_at.isoformat(),

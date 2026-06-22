@@ -34,6 +34,7 @@ class ReserveItem(BaseModel):
 
 
 class ReserveRequest(BaseModel):
+    order_id: str
     idempotency_key: str
     items: list[ReserveItem]
 
@@ -48,7 +49,7 @@ class UnreserveRequest(BaseModel):
     items: list[UnreserveItem]
 
 
-@router.post("/api/v1/reserve", status_code=status.HTTP_200_OK)
+@router.post("/api/v1/inventory/reserve", status_code=status.HTTP_200_OK)
 def reserve_endpoint(
     payload: ReserveRequest,
     x_service_key: str | None = Header(default=None, alias="X-Service-Key"),
@@ -69,7 +70,7 @@ def reserve_endpoint(
     return result
 
 
-@router.post("/api/v1/unreserve", status_code=status.HTTP_200_OK)
+@router.post("/api/v1/inventory/unreserve", status_code=status.HTTP_200_OK)
 def unreserve_endpoint(
     payload: UnreserveRequest,
     x_service_key: str | None = Header(default=None, alias="X-Service-Key"),

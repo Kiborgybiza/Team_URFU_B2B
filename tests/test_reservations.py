@@ -1,4 +1,4 @@
-"""US-B2B-05: Reserve / Unreserve — POST /api/v1/reserve, POST /api/v1/unreserve"""
+"""US-B2B-05: Reserve / Unreserve — POST /api/v1/inventory/reserve, POST /api/v1/inventory/unreserve"""
 from uuid import uuid4
 
 import pytest
@@ -58,8 +58,9 @@ def sku_factory(db_session: Session, category_factory):
     return create
 
 
-def reserve_payload(sku_id, quantity: int = 2, idempotency_key: str | None = None) -> dict:
+def reserve_payload(sku_id, quantity: int = 2, idempotency_key: str | None = None, order_id: str | None = None) -> dict:
     return {
+        "order_id": order_id or str(uuid4()),
         "idempotency_key": idempotency_key or str(uuid4()),
         "items": [{"sku_id": str(sku_id), "quantity": quantity}],
     }
@@ -71,7 +72,7 @@ def test_reserve_all_skus_succeeds(client, service_key_headers, sku_factory, b2c
     idem_key = str(uuid4())
 
     response = client.post(
-        "/api/v1/reserve",
+        "/api/v1/inventory/reserve",
         json=reserve_payload(sku.id, quantity=3, idempotency_key=idem_key),
         headers=service_key_headers,
     )
@@ -91,8 +92,9 @@ def test_partial_insufficient_stock_returns_409_all_rollback(client, service_key
     sku_low = sku_factory(active_quantity=1)
 
     response = client.post(
-        "/api/v1/reserve",
+        "/api/v1/inventory/reserve",
         json={
+            "order_id": str(uuid4()),
             "idempotency_key": str(uuid4()),
             "items": [
                 {"sku_id": str(sku_ok.id), "quantity": 5},
@@ -116,10 +118,10 @@ def test_idempotent_reserve_returns_200_without_double_deduction(client, service
     idem_key = str(uuid4())
     payload = reserve_payload(sku.id, quantity=3, idempotency_key=idem_key)
 
-    r1 = client.post("/api/v1/reserve", json=payload, headers=service_key_headers)
+    r1 = client.post("/api/v1/inventory/reserve", json=payload, headers=service_key_headers)
     assert r1.status_code == 200
 
-    r2 = client.post("/api/v1/reserve", json=payload, headers=service_key_headers)
+    r2 = client.post("/api/v1/inventory/reserve", json=payload, headers=service_key_headers)
     assert r2.status_code == 200
 
     db_session.refresh(sku)
@@ -133,7 +135,7 @@ def test_sku_out_of_stock_event_emitted(client, service_key_headers, sku_factory
     idem_key = str(uuid4())
 
     response = client.post(
-        "/api/v1/reserve",
+        "/api/v1/inventory/reserve",
         json=reserve_payload(sku.id, quantity=2, idempotency_key=idem_key),
         headers=service_key_headers,
     )
@@ -141,7 +143,7 @@ def test_sku_out_of_stock_event_emitted(client, service_key_headers, sku_factory
     assert response.status_code == 200
     assert len(b2c_requests) == 1
     event = b2c_requests[0]["json"]
-    assert event["event"] == "SKU_OUT_OF_STOCK"
+    assert event["event_type"] == "SKU_OUT_OF_STOCK"
     assert event["sku_id"] == str(sku.id)
 
 
@@ -152,8 +154,8 @@ def test_unreserve_restores_quantities(client, service_key_headers, sku_factory,
     idem_key = str(uuid4())
 
     client.post(
-        "/api/v1/reserve",
-        json=reserve_payload(sku.id, quantity=4, idempotency_key=idem_key),
+        "/api/v1/inventory/reserve",
+        json=reserve_payload(sku.id, quantity=4, idempotency_key=idem_key, order_id=order_id),
         headers=service_key_headers,
     )
     db_session.refresh(sku)
@@ -161,7 +163,7 @@ def test_unreserve_restores_quantities(client, service_key_headers, sku_factory,
     assert sku.reserved_quantity == 4
 
     response = client.post(
-        "/api/v1/unreserve",
+        "/api/v1/inventory/unreserve",
         json={"order_id": order_id, "items": [{"sku_id": str(sku.id), "quantity": 4}]},
         headers=service_key_headers,
     )

@@ -1,3 +1,4 @@
+import re
 import uuid
 
 from sqlalchemy import and_, select
@@ -76,10 +77,14 @@ def delete_product(db: Session, product_id: uuid.UUID, seller_id: uuid.UUID) -> 
     db.commit()
 
 
-def create_product(db: Session, payload: dict, seller_id: uuid.UUID) -> Product:
-    if not payload.get("images"):
-        raise ProductCreateValidationError("images", "At least one image is required")
+def _slugify(title: str) -> str:
+    slug = title.lower()
+    slug = re.sub(r"[^\w\s-]", "", slug)
+    slug = re.sub(r"\s+", "-", slug.strip())
+    return slug
 
+
+def create_product(db: Session, payload: dict, seller_id: uuid.UUID) -> Product:
     category_id = payload.get("category_id")
     if category_id is None:
         raise ProductCreateValidationError("category_id", "category_id is required")
@@ -92,6 +97,7 @@ def create_product(db: Session, payload: dict, seller_id: uuid.UUID) -> Product:
         category_id=category_id,
         seller_id=seller_id,
         status=ProductStatus.CREATED,
+        slug=_slugify(payload["title"]),
     )
     product.images = [ProductImage(url=img["url"], ordering=img.get("ordering", 0)) for img in payload["images"]]
     product.characteristics = [

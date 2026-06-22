@@ -86,10 +86,10 @@ def test_first_sku_emits_created_event_to_moderation(client, auth_headers, produ
 
     assert len(moderation_requests) == 1
     event = moderation_requests[0]["json"]
-    assert event["event"] == "CREATED"
+    assert event["event_type"] == "CREATED"
     assert event["product_id"] == str(product.id)
     assert "idempotency_key" in event
-    assert "date" in event
+    assert "occurred_at" in event
 
 
 def test_second_sku_no_state_change(client, auth_headers, product_factory, moderation_requests, db_session):
