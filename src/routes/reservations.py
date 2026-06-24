@@ -61,7 +61,7 @@ def reserve_endpoint(
 
     items = [{"sku_id": item.sku_id, "quantity": item.quantity} for item in payload.items]
     try:
-        result = reserve_skus(db, payload.idempotency_key, items)
+        result = reserve_skus(db, payload.idempotency_key, items, order_id=payload.order_id)
     except IdempotencyConflictError as exc:
         return _error(409, "IDEMPOTENCY_CONFLICT", str(exc))
     except ReservationConflictError as exc:

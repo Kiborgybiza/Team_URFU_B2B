@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, selectinload
 
-from src.models import Category, Product, ProductCharacteristic, ProductImage, ProductStatus, SKU
+from src.models import Category, Product, ProductCharacteristic, ProductImage, ProductStatus, SKU, SKUImage
 from src.services.errors import ForbiddenError, NotFoundError
 
 
@@ -22,7 +22,10 @@ def _product_query():
             selectinload(Product.category),
             selectinload(Product.images),
             selectinload(Product.characteristics),
-            selectinload(Product.skus).selectinload(SKU.characteristics),
+            selectinload(Product.skus).options(
+                selectinload(SKU.characteristics),
+                selectinload(SKU.images),
+            ),
         )
     )
 

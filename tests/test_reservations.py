@@ -79,7 +79,9 @@ def test_reserve_all_skus_succeeds(client, service_key_headers, sku_factory, b2c
 
     assert response.status_code == 200
     body = response.json()
-    assert body["reserved"] is True
+    assert body["status"] == "RESERVED"
+    assert body["order_id"] is not None
+    assert "reserved_at" in body
 
     db_session.refresh(sku)
     assert sku.active_quantity == 7
