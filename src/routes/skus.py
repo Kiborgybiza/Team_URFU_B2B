@@ -43,6 +43,10 @@ def _char_out(c) -> dict:
     return {"id": str(c.id), "name": c.name, "value": c.value}
 
 
+def _sku_image_out(img) -> dict:
+    return {"id": str(img.id), "url": img.url, "ordering": img.ordering}
+
+
 def _sku_out(sku) -> dict:
     return {
         "id": str(sku.id),
@@ -52,7 +56,7 @@ def _sku_out(sku) -> dict:
         "cost_price": sku.cost_price,
         "discount": sku.discount,
         "article": sku.article,
-        "image": sku.image,
+        "images": [_sku_image_out(i) for i in sku.images],
         "active_quantity": sku.active_quantity,
         "reserved_quantity": sku.reserved_quantity,
         "stock_quantity": sku.active_quantity + sku.reserved_quantity,

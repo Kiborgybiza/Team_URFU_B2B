@@ -104,6 +104,18 @@ class SKU(Base):
 
     product = relationship("Product", back_populates="skus")
     characteristics = relationship("SKUCharacteristic", back_populates="sku", cascade="all, delete-orphan")
+    images = relationship("SKUImage", back_populates="sku", cascade="all, delete-orphan", order_by="SKUImage.ordering")
+
+
+class SKUImage(Base):
+    __tablename__ = "sku_images"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    sku_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("skus.id", ondelete="CASCADE"))
+    url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    ordering: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    sku = relationship("SKU", back_populates="images")
 
 
 class SKUCharacteristic(Base):

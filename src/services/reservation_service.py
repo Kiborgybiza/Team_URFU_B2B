@@ -73,7 +73,7 @@ def _sku_visible(sku: SKU | None) -> bool:
     return sku.product.status == ProductStatus.MODERATED and not sku.product.deleted and not sku.deleted
 
 
-def reserve_skus(db: Session, idempotency_key: str, items: list[dict]) -> dict:
+def reserve_skus(db: Session, idempotency_key: str, items: list[dict], order_id: str | None = None) -> dict:
     normalized = _normalize_items(items)
     payload_for_hash = {
         "idempotency_key": idempotency_key,
@@ -142,7 +142,12 @@ def reserve_skus(db: Session, idempotency_key: str, items: list[dict]) -> dict:
             "remaining_stock": sku.active_quantity,
         })
 
-    response: dict = {"reserved": True, "items": response_items}
+    now = datetime.now(timezone.utc).isoformat()
+    response: dict = {
+        "order_id": order_id or idempotency_key,
+        "status": "RESERVED",
+        "reserved_at": now,
+    }
     operation.response = response
     db.commit()
 
@@ -173,7 +178,12 @@ def unreserve_skus(db: Session, order_id: str, items: list[dict]) -> dict:
             raise UnreserveConflictError("order_id used with different payload")
         return existing.response
 
-    response: dict = {"ok": True}
+    now = datetime.now(timezone.utc).isoformat()
+    response: dict = {
+        "order_id": order_id,
+        "status": "UNRESERVED",
+        "processed_at": now,
+    }
     operation = UnreserveOperation(
         order_id=order_id,
         request_hash=req_hash,

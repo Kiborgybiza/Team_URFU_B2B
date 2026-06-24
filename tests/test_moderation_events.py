@@ -141,7 +141,7 @@ def test_hard_blocked_product_rejects_seller_edits(client, auth_headers, mod_key
         headers=mod_key_headers,
     )
 
-    put_response = client.put(
+    put_response = client.patch(
         f"/api/v1/products/{moderated_product.id}",
         json={"title": "New title"},
         headers=auth_headers(SELLER_ID),

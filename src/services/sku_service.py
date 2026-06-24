@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from src.models import Product, ProductStatus, SKU, SKUCharacteristic
+from src.models import Product, ProductStatus, SKU, SKUCharacteristic, SKUImage
 from src.services.errors import ForbiddenError, NotFoundError
 from src.services.moderation_service import ModerationSenderError, send_product_created_event
 
@@ -26,7 +26,11 @@ def _get_product_with_skus(db: Session, product_id: uuid.UUID) -> Product:
 
 def _get_sku(db: Session, sku_id: uuid.UUID) -> SKU:
     sku = db.scalars(
-        select(SKU).options(selectinload(SKU.characteristics), selectinload(SKU.product)).where(SKU.id == sku_id)
+        select(SKU).options(
+            selectinload(SKU.characteristics),
+            selectinload(SKU.images),
+            selectinload(SKU.product),
+        ).where(SKU.id == sku_id)
     ).first()
     if sku is None:
         raise NotFoundError(f"SKU {sku_id} not found")
@@ -59,6 +63,9 @@ def create_sku(db: Session, payload: dict, seller_id: uuid.UUID) -> SKU:
     )
     sku.characteristics = [
         SKUCharacteristic(name=c["name"], value=c["value"]) for c in payload.get("characteristics", [])
+    ]
+    sku.images = [
+        SKUImage(url=img["url"], ordering=img.get("ordering", 0)) for img in images
     ]
     db.add(sku)
 

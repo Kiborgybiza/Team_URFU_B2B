@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Query, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -50,6 +50,10 @@ def _char_out(c) -> dict:
     return {"id": str(c.id), "name": c.name, "value": c.value}
 
 
+def _sku_image_out(img) -> dict:
+    return {"id": str(img.id), "url": img.url, "ordering": img.ordering}
+
+
 def _sku_seller_out(sku) -> dict:
     return {
         "id": str(sku.id),
@@ -59,7 +63,7 @@ def _sku_seller_out(sku) -> dict:
         "cost_price": sku.cost_price,
         "discount": sku.discount,
         "article": sku.article,
-        "image": sku.image,
+        "images": [_sku_image_out(i) for i in sku.images],
         "active_quantity": sku.active_quantity,
         "reserved_quantity": sku.reserved_quantity,
         "stock_quantity": sku.active_quantity + sku.reserved_quantity,
@@ -77,8 +81,8 @@ def _sku_catalog_out(sku) -> dict:
         "price": sku.price,
         "discount": sku.discount,
         "article": sku.article,
-        "image": sku.image,
-        "active_quantity": sku.active_quantity,
+        "images": [_sku_image_out(i) for i in sku.images],
+        "stock_quantity": sku.active_quantity,
         "characteristics": [_char_out(c) for c in sku.characteristics],
         "created_at": sku.created_at.isoformat(),
         "updated_at": sku.updated_at.isoformat(),
@@ -92,6 +96,7 @@ def _product_catalog_out(product) -> dict:
         "category_id": str(product.category_id),
         "title": product.title,
         "description": product.description,
+        "slug": product.slug,
         "status": product.status.value,
         "category": {"id": str(product.category.id), "name": product.category.name},
         "images": [_image_out(i) for i in product.images],
@@ -129,6 +134,8 @@ def _product_out(product) -> dict:
 @router.get("", status_code=status.HTTP_200_OK)
 def get_catalog_endpoint(
     ids: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     access: CatalogAccess | JSONResponse = Depends(get_catalog_access),
     db: Session = Depends(get_db),
 ):
@@ -138,7 +145,14 @@ def get_catalog_endpoint(
         return _error(401, "UNAUTHORIZED", "Service key required")
 
     products = get_catalog_products(db, ids)
-    return {"items": [_product_catalog_out(p) for p in products]}
+    total_count = len(products)
+    page = products[offset: offset + limit]
+    return {
+        "items": [_product_catalog_out(p) for p in page],
+        "total_count": total_count,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/{product_id}", status_code=status.HTTP_200_OK)
@@ -181,7 +195,7 @@ class ProductUpdateRequest(BaseModel):
     category_id: uuid.UUID | None = None
 
 
-@router.put("/{product_id}", status_code=status.HTTP_200_OK)
+@router.patch("/{product_id}", status_code=status.HTTP_200_OK)
 def update_product_endpoint(
     product_id: uuid.UUID,
     payload: ProductUpdateRequest,
@@ -203,7 +217,7 @@ def update_product_endpoint(
     return _product_out(product)
 
 
-@router.delete("/{product_id}", status_code=status.HTTP_200_OK)
+@router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product_endpoint(
     product_id: uuid.UUID,
     current_seller: CurrentSeller | JSONResponse = Depends(get_current_seller),
@@ -219,4 +233,4 @@ def delete_product_endpoint(
     except NotFoundError as exc:
         return _error(404, "NOT_FOUND", str(exc))
 
-    return {"ok": True}
+    return Response(status_code=204)
