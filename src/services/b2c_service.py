@@ -12,13 +12,16 @@ class B2CSenderError(Exception):
     pass
 
 
-def send_sku_out_of_stock_event(*, idempotency_key: str, product_id: JsonId, sku_id: JsonId) -> None:
+def send_sku_out_of_stock_event(*, idempotency_key: str, product_id: JsonId, sku_id: JsonId, available_quantity: int = 0) -> None:
     payload = {
-        "idempotency_key": idempotency_key,
         "event_type": "SKU_OUT_OF_STOCK",
-        "product_id": str(product_id),
-        "sku_id": str(sku_id),
+        "idempotency_key": idempotency_key,
         "occurred_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "payload": {
+            "sku_id": str(sku_id),
+            "product_id": str(product_id),
+            "available_quantity": available_quantity,
+        },
     }
     url = f"{settings.b2c_url.rstrip('/')}/api/v1/b2b/events"
     try:

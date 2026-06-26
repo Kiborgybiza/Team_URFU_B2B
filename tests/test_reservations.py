@@ -107,6 +107,10 @@ def test_partial_insufficient_stock_returns_409_all_rollback(client, service_key
     )
 
     assert response.status_code == 409
+    body = response.json()
+    assert "code" in body
+    assert "message" in body
+    assert "failed_items" in body
 
     db_session.refresh(sku_ok)
     db_session.refresh(sku_low)
@@ -146,7 +150,8 @@ def test_sku_out_of_stock_event_emitted(client, service_key_headers, sku_factory
     assert len(b2c_requests) == 1
     event = b2c_requests[0]["json"]
     assert event["event_type"] == "SKU_OUT_OF_STOCK"
-    assert event["sku_id"] == str(sku.id)
+    assert event["payload"]["sku_id"] == str(sku.id)
+    assert event["payload"]["available_quantity"] == 0
 
 
 def test_unreserve_restores_quantities(client, service_key_headers, sku_factory, b2c_requests, db_session):

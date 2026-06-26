@@ -12,33 +12,41 @@ class ModerationSenderError(Exception):
     pass
 
 
-def build_product_created_event(product_id: JsonId, seller_id: str) -> dict:
+def build_product_created_event(product_id: JsonId, seller_id: str, json_after: dict) -> dict:
     return {
+        "event_type": "PRODUCT_CREATED",
         "idempotency_key": str(uuid5(NAMESPACE_URL, f"product-created:{product_id}")),
-        "product_id": str(product_id),
-        "seller_id": seller_id,
-        "event_type": "CREATED",
         "occurred_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "payload": {
+            "product_id": str(product_id),
+            "seller_id": seller_id,
+            "json_after": json_after,
+        },
     }
 
 
-def build_product_edited_event(product_id: JsonId, seller_id: str) -> dict:
+def build_product_edited_event(product_id: JsonId, seller_id: str, json_after: dict) -> dict:
     return {
+        "event_type": "PRODUCT_EDITED",
         "idempotency_key": str(uuid4()),
-        "product_id": str(product_id),
-        "seller_id": seller_id,
-        "event_type": "EDITED",
         "occurred_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "payload": {
+            "product_id": str(product_id),
+            "seller_id": seller_id,
+            "json_after": json_after,
+        },
     }
 
 
 def build_product_deleted_event(product_id: JsonId, seller_id: str) -> dict:
     return {
+        "event_type": "PRODUCT_DELETED",
         "idempotency_key": str(uuid4()),
-        "product_id": str(product_id),
-        "seller_id": seller_id,
-        "event_type": "DELETED",
         "occurred_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "payload": {
+            "product_id": str(product_id),
+            "seller_id": seller_id,
+        },
     }
 
 
@@ -56,12 +64,12 @@ def _send(payload: dict) -> None:
         raise ModerationSenderError("Moderation service unavailable") from exc
 
 
-def send_product_created_event(product_id: JsonId, seller_id: str) -> None:
-    _send(build_product_created_event(product_id, seller_id))
+def send_product_created_event(product_id: JsonId, seller_id: str, json_after: dict) -> None:
+    _send(build_product_created_event(product_id, seller_id, json_after))
 
 
-def send_product_edited_event(product_id: JsonId, seller_id: str) -> None:
-    _send(build_product_edited_event(product_id, seller_id))
+def send_product_edited_event(product_id: JsonId, seller_id: str, json_after: dict) -> None:
+    _send(build_product_edited_event(product_id, seller_id, json_after))
 
 
 def send_product_deleted_event(product_id: JsonId, seller_id: str) -> None:

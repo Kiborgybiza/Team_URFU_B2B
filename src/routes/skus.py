@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from src.database import get_db
 from src.deps import CurrentSeller, get_current_seller
 from src.services.errors import ForbiddenError, NotFoundError
-from src.services.sku_service import ModerationUnavailableError, create_sku
+from src.services.sku_service import ModerationUnavailableError, SKUValidationError, create_sku
 
 router = APIRouter(prefix="/api/v1/skus", tags=["SKUs"])
 
@@ -77,6 +77,8 @@ def create_sku_endpoint(
 
     try:
         sku = create_sku(db, payload.model_dump(), current_seller.seller_id)
+    except SKUValidationError as exc:
+        return _error(400, exc.code, exc.message)
     except ForbiddenError as exc:
         return _error(403, "FORBIDDEN", str(exc))
     except NotFoundError as exc:
