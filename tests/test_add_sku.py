@@ -75,7 +75,7 @@ def test_first_sku_transitions_product_to_on_moderation(client, auth_headers, pr
 
 
 def test_first_sku_emits_created_event_to_moderation(client, auth_headers, product_factory, moderation_requests):
-    """First SKU sends CREATED event to Moderation with correct fields."""
+    """First SKU sends PRODUCT_CREATED event to Moderation with correct fields."""
     product = product_factory(status=ProductStatus.CREATED)
 
     client.post(
@@ -86,10 +86,11 @@ def test_first_sku_emits_created_event_to_moderation(client, auth_headers, produ
 
     assert len(moderation_requests) == 1
     event = moderation_requests[0]["json"]
-    assert event["event_type"] == "CREATED"
-    assert event["product_id"] == str(product.id)
+    assert event["event_type"] == "PRODUCT_CREATED"
     assert "idempotency_key" in event
     assert "occurred_at" in event
+    assert event["payload"]["product_id"] == str(product.id)
+    assert "json_after" in event["payload"]
 
 
 def test_second_sku_no_state_change(client, auth_headers, product_factory, moderation_requests, db_session):
@@ -129,3 +130,59 @@ def test_add_sku_unauthorized_returns_401(client, product_factory):
 
     response = client.post("/api/v1/skus", json=sku_payload(product.id))
     assert response.status_code == 401
+
+
+def test_add_sku_without_image_returns_400(client, auth_headers, product_factory, moderation_requests):
+    """SKU without any image must return 400 with INVALID_REQUEST."""
+    product = product_factory(status=ProductStatus.CREATED)
+
+    response = client.post(
+        "/api/v1/skus",
+        json=sku_payload(product.id, images=[], image=None),
+        headers=auth_headers(SELLER_ID),
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "INVALID_REQUEST"
+    assert "image" in body["message"].lower()
+    assert len(moderation_requests) == 0
+
+
+def test_sku_on_moderated_product_retriggers_moderation(client, auth_headers, product_factory, moderation_requests, db_session):
+    """Adding SKU to MODERATED product transitions it to ON_MODERATION and sends PRODUCT_EDITED event."""
+    product = product_factory(status=ProductStatus.MODERATED)
+
+    response = client.post(
+        "/api/v1/skus",
+        json=sku_payload(product.id),
+        headers=auth_headers(SELLER_ID),
+    )
+
+    assert response.status_code == 201
+    db_session.refresh(product)
+    assert product.status == ProductStatus.ON_MODERATION
+    assert len(moderation_requests) == 1
+    event = moderation_requests[0]["json"]
+    assert event["event_type"] == "PRODUCT_EDITED"
+    assert event["payload"]["product_id"] == str(product.id)
+    assert "json_after" in event["payload"]
+
+
+def test_sku_on_blocked_product_retriggers_moderation(client, auth_headers, product_factory, moderation_requests, db_session):
+    """Adding SKU to BLOCKED product transitions it to ON_MODERATION and sends PRODUCT_EDITED event."""
+    product = product_factory(status=ProductStatus.BLOCKED)
+
+    response = client.post(
+        "/api/v1/skus",
+        json=sku_payload(product.id),
+        headers=auth_headers(SELLER_ID),
+    )
+
+    assert response.status_code == 201
+    db_session.refresh(product)
+    assert product.status == ProductStatus.ON_MODERATION
+    assert len(moderation_requests) == 1
+    event = moderation_requests[0]["json"]
+    assert event["event_type"] == "PRODUCT_EDITED"
+    assert event["payload"]["product_id"] == str(product.id)

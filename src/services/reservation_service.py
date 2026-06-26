@@ -4,6 +4,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -125,7 +126,7 @@ def reserve_skus(db: Session, idempotency_key: str, items: list[dict], order_id:
 
     if failed:
         db.rollback()
-        raise ReservationConflictError({"reserved": False, "failed_items": failed})
+        raise ReservationConflictError({"reserved": False, "failed_items": failed, "message": "Insufficient stock for one or more items"})
 
     out_of_stock: list[tuple[uuid.UUID, uuid.UUID]] = []
     response_items = []
@@ -153,10 +154,12 @@ def reserve_skus(db: Session, idempotency_key: str, items: list[dict], order_id:
 
     for product_id, sku_id in out_of_stock:
         try:
+            event_key = str(uuid5(NAMESPACE_URL, f"stock-out:{idempotency_key}:{sku_id}"))
             send_sku_out_of_stock_event(
-                idempotency_key=idempotency_key,
+                idempotency_key=event_key,
                 product_id=product_id,
                 sku_id=sku_id,
+                available_quantity=0,
             )
         except Exception:
             logger.exception("Failed to send SKU_OUT_OF_STOCK to B2C")
