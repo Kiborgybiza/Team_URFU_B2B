@@ -166,6 +166,7 @@ def test_sku_on_moderated_product_retriggers_moderation(client, auth_headers, pr
     event = moderation_requests[0]["json"]
     assert event["event_type"] == "PRODUCT_EDITED"
     assert event["payload"]["product_id"] == str(product.id)
+    assert "json_before" in event["payload"]
     assert "json_after" in event["payload"]
 
 

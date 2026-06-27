@@ -80,6 +80,9 @@ def create_sku(db: Session, payload: dict, seller_id: uuid.UUID) -> SKU:
     is_first_sku = product.status == ProductStatus.CREATED and all(s.deleted for s in product.skus)
     needs_remoderation = product.status in (ProductStatus.MODERATED, ProductStatus.BLOCKED)
 
+    # Snapshot "before" must be captured before any changes are applied
+    json_before = _product_snapshot(product) if needs_remoderation else None
+
     sku = SKU(
         product_id=payload["product_id"],
         name=payload["name"],
@@ -119,6 +122,7 @@ def create_sku(db: Session, payload: dict, seller_id: uuid.UUID) -> SKU:
             send_product_edited_event(
                 product_id=str(product.id),
                 seller_id=str(seller_id),
+                json_before=json_before,
                 json_after=_product_snapshot(product),
             )
         except ModerationSenderError as exc:
