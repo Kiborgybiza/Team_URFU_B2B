@@ -123,3 +123,56 @@ def test_batch_ids_returns_visible_subset(client, service_key_headers, product_f
     assert str(visible.id) in ids
     assert str(hidden.id) not in ids
     assert nonexistent_id not in ids
+
+
+def test_public_products_path_returns_catalog(client, service_key_headers, product_factory):
+    """GET /api/v1/public/products returns paginated catalog with X-Service-Key."""
+    product = product_factory(status=ProductStatus.MODERATED, active_quantity=5)
+
+    response = client.get("/api/v1/public/products", headers=service_key_headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "items" in body
+    assert "total_count" in body
+    ids = [item["id"] for item in body["items"]]
+    assert str(product.id) in ids
+
+
+def test_public_products_path_requires_service_key(client):
+    """GET /api/v1/public/products without X-Service-Key returns 401."""
+    response = client.get("/api/v1/public/products")
+    assert response.status_code == 401
+
+
+def test_public_products_sku_has_active_quantity(client, service_key_headers, product_factory):
+    """Public catalog SKU must include active_quantity (no cost_price or reserved_quantity)."""
+    product_factory(status=ProductStatus.MODERATED, active_quantity=5)
+
+    response = client.get("/api/v1/public/products", headers=service_key_headers)
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert len(items) >= 1
+    sku = items[0]["skus"][0]
+    assert "active_quantity" in sku
+    assert "cost_price" not in sku
+    assert "reserved_quantity" not in sku
+
+
+def test_public_products_batch_returns_by_ids(client, service_key_headers, product_factory):
+    """POST /api/v1/public/products/batch returns visible products for given IDs."""
+    visible = product_factory(status=ProductStatus.MODERATED, active_quantity=5)
+    hidden = product_factory(status=ProductStatus.BLOCKED, active_quantity=5)
+
+    response = client.post(
+        "/api/v1/public/products/batch",
+        json={"product_ids": [str(visible.id), str(hidden.id)]},
+        headers=service_key_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    ids = [item["id"] for item in body]
+    assert str(visible.id) in ids
+    assert str(hidden.id) not in ids

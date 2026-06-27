@@ -25,7 +25,7 @@ def build_product_created_event(product_id: JsonId, seller_id: str, json_after: 
     }
 
 
-def build_product_edited_event(product_id: JsonId, seller_id: str, json_after: dict) -> dict:
+def build_product_edited_event(product_id: JsonId, seller_id: str, json_before: dict, json_after: dict) -> dict:
     return {
         "event_type": "PRODUCT_EDITED",
         "idempotency_key": str(uuid4()),
@@ -33,6 +33,7 @@ def build_product_edited_event(product_id: JsonId, seller_id: str, json_after: d
         "payload": {
             "product_id": str(product_id),
             "seller_id": seller_id,
+            "json_before": json_before,
             "json_after": json_after,
         },
     }
@@ -68,8 +69,8 @@ def send_product_created_event(product_id: JsonId, seller_id: str, json_after: d
     _send(build_product_created_event(product_id, seller_id, json_after))
 
 
-def send_product_edited_event(product_id: JsonId, seller_id: str, json_after: dict) -> None:
-    _send(build_product_edited_event(product_id, seller_id, json_after))
+def send_product_edited_event(product_id: JsonId, seller_id: str, json_before: dict, json_after: dict) -> None:
+    _send(build_product_edited_event(product_id, seller_id, json_before, json_after))
 
 
 def send_product_deleted_event(product_id: JsonId, seller_id: str) -> None:
