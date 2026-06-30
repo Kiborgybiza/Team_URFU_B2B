@@ -46,6 +46,25 @@ def _sku_public_out(sku) -> dict:
     }
 
 
+def _product_short_out(product) -> dict:
+    """Short catalog card per openapi ProductPublicShortResponse.
+
+    required: [id, title, slug, status, category_id, created_at, min_price]
+    """
+    visible_skus = [s for s in product.skus if not s.deleted and s.active_quantity > 0]
+    priced = [s.price for s in (visible_skus or [s for s in product.skus if not s.deleted])]
+    return {
+        "id": str(product.id),
+        "title": product.title,
+        "slug": product.slug or "",
+        "status": product.status.value,
+        "category_id": str(product.category_id),
+        "min_price": min(priced) if priced else 0,
+        "cover_image": product.images[0].url if product.images else None,
+        "created_at": product.created_at.isoformat(),
+    }
+
+
 def _product_public_out(product) -> dict:
     return {
         "id": str(product.id),
@@ -83,7 +102,7 @@ def list_public_products(
     total_count = len(products)
     page = products[offset: offset + limit]
     return {
-        "items": [_product_public_out(p) for p in page],
+        "items": [_product_short_out(p) for p in page],
         "total_count": total_count,
         "limit": limit,
         "offset": offset,

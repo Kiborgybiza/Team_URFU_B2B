@@ -126,17 +126,28 @@ def test_batch_ids_returns_visible_subset(client, service_key_headers, product_f
 
 
 def test_public_products_path_returns_catalog(client, service_key_headers, product_factory):
-    """GET /api/v1/public/products returns paginated catalog with X-Service-Key."""
+    """GET /api/v1/public/products items must match ProductPublicShortResponse.
+
+    required: [id, title, slug, status, category_id, created_at, min_price];
+    the short card must NOT carry the full-form fields (skus, description, etc.).
+    """
     product = product_factory(status=ProductStatus.MODERATED, active_quantity=5)
 
     response = client.get("/api/v1/public/products", headers=service_key_headers)
 
     assert response.status_code == 200
     body = response.json()
-    assert "items" in body
-    assert "total_count" in body
-    ids = [item["id"] for item in body["items"]]
-    assert str(product.id) in ids
+    assert {"items", "total_count", "limit", "offset"} <= body.keys()
+
+    item = next(i for i in body["items"] if i["id"] == str(product.id))
+    for field in ("id", "title", "slug", "status", "category_id", "created_at", "min_price"):
+        assert field in item, f"missing required short-card field: {field}"
+    assert isinstance(item["min_price"], int)
+    assert item["min_price"] == 10000  # factory SKU price
+    assert item["cover_image"] == "/s3/test.jpg"  # factory product image
+
+    for full_only in ("skus", "description", "seller_id", "updated_at", "characteristics"):
+        assert full_only not in item, f"short card must not include {full_only}"
 
 
 def test_public_products_path_requires_service_key(client):
@@ -145,19 +156,38 @@ def test_public_products_path_requires_service_key(client):
     assert response.status_code == 401
 
 
-def test_public_products_sku_has_active_quantity(client, service_key_headers, product_factory):
-    """Public catalog SKU must include active_quantity (no cost_price or reserved_quantity)."""
-    product_factory(status=ProductStatus.MODERATED, active_quantity=5)
+def test_public_products_batch_sku_has_active_quantity(client, service_key_headers, product_factory):
+    """Batch (full form) SKU must include active_quantity (no cost_price/reserved_quantity)."""
+    product = product_factory(status=ProductStatus.MODERATED, active_quantity=5)
+
+    response = client.post(
+        "/api/v1/public/products/batch",
+        json={"product_ids": [str(product.id)]},
+        headers=service_key_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) >= 1
+    sku = body[0]["skus"][0]
+    assert "active_quantity" in sku
+    assert "cost_price" not in sku
+    assert "reserved_quantity" not in sku
+
+
+def test_public_products_canonical_visibility(client, service_key_headers, product_factory):
+    """Canonical /api/v1/public/products applies the catalog visibility filter."""
+    visible = product_factory(status=ProductStatus.MODERATED, active_quantity=5)
+    hard_blocked = product_factory(status=ProductStatus.HARD_BLOCKED, active_quantity=5)
+    out_of_stock = product_factory(status=ProductStatus.MODERATED, active_quantity=0)
 
     response = client.get("/api/v1/public/products", headers=service_key_headers)
 
     assert response.status_code == 200
-    items = response.json()["items"]
-    assert len(items) >= 1
-    sku = items[0]["skus"][0]
-    assert "active_quantity" in sku
-    assert "cost_price" not in sku
-    assert "reserved_quantity" not in sku
+    ids = [item["id"] for item in response.json()["items"]]
+    assert str(visible.id) in ids
+    assert str(hard_blocked.id) not in ids
+    assert str(out_of_stock.id) not in ids
 
 
 def test_public_products_batch_returns_by_ids(client, service_key_headers, product_factory):
